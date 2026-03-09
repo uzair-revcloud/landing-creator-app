@@ -3,18 +3,36 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 
 async function deployToVercel(templateId, config) {
-  const res = await fetch("/api/deploy", {
+  const url = "http://localhost:3500/api/dlpc/deploy";
+  const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-auth-token":
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTgwLCJpYXQiOjE3NzMwODcxMDUsImV4cCI6MTc3MzE3MzUwNX0.i8uELrrHFYddutxqCFcbCcKEcpRC_Bl69oGxoThChpM",
+    },
     body: JSON.stringify({ templateId, config }),
   });
+  const text = await res.text();
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Deploy failed");
+    let message = "Deploy failed";
+    try {
+      const json = JSON.parse(text);
+      if (json.error) message = json.error;
+    } catch {
+      if (text) message = text;
+    }
+    throw new Error(message);
   }
-  const data = await res.json();
-  if (!data.url) throw new Error("No URL in response");
-  return data.url;
+  const json = JSON.parse(text);
+  if (json.error) throw new Error(json.message || "Deploy failed");
+  const deployUrl = json.data?.url;
+  if (!deployUrl) throw new Error(json.message || "No URL in response");
+  return {
+    url: deployUrl,
+    deploymentId: json.data?.deploymentId,
+    message: json.message,
+  };
 }
 
 function Editor({ template }) {
@@ -23,7 +41,7 @@ function Editor({ template }) {
   const [iframeReady, setIframeReady] = useState(false);
   const [activeField, setActiveField] = useState(null);
   const [isDeployingState, setIsDeployingState] = useState(false);
-  const [deployedUrl, setDeployedUrl] = useState(null);
+  const [deployResult, setDeployResult] = useState(null);
   const [deployError, setDeployError] = useState(null);
 
   const iframeRef = useRef(null);
@@ -85,9 +103,10 @@ function Editor({ template }) {
     isDeploying.current = true;
     setIsDeployingState(true);
     setDeployError(null);
+    setDeployResult(null);
     try {
-      const url = await deployToVercel(template.id, config);
-      setDeployedUrl(url);
+      const result = await deployToVercel(template.id, config);
+      setDeployResult(result);
     } catch (err) {
       setDeployError(err.message);
     } finally {
@@ -136,18 +155,25 @@ function Editor({ template }) {
             >
               {isDeployingState ? "Deploying…" : "Deploy"}
             </button>
-            {deployedUrl && (
-              <p className="mt-2 text-sm text-green-700 break-all">
-                Deployed:{" "}
+            {deployResult && (
+              <div className="mt-2 space-y-1">
+                <p className="text-sm font-medium text-green-700">
+                  {deployResult.message ?? "Deployed"}
+                </p>
                 <a
-                  href={deployedUrl}
+                  href={deployResult.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline"
+                  className="block text-sm text-indigo-600 underline break-all hover:text-indigo-800"
                 >
-                  {deployedUrl}
+                  {deployResult.url}
                 </a>
-              </p>
+                {deployResult.deploymentId && (
+                  <p className="text-xs text-neutral-500">
+                    Deployment: {deployResult.deploymentId}
+                  </p>
+                )}
+              </div>
             )}
             {deployError && (
               <p className="mt-2 text-sm text-red-600">{deployError}</p>

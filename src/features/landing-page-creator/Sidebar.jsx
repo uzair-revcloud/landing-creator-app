@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 const initialDraft = {
   heroHeading: "",
+  heroSubheading: "",
   logo: null,
   brandName: "",
   title: "",
@@ -25,6 +26,11 @@ function Sidebar({ activeField, config, onChange, onClose }) {
       setDraft((prev) => ({
         ...prev,
         heroHeading: config.hero?.heading ?? "",
+      }));
+    } else if (activeField === "subheading") {
+      setDraft((prev) => ({
+        ...prev,
+        heroSubheading: config.hero?.subheading ?? "",
       }));
     } else if (activeField === "logo") {
       setDraft((prev) => ({
@@ -53,14 +59,29 @@ function Sidebar({ activeField, config, onChange, onClose }) {
     setUploadError(null);
     setUploadingField(field);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload-asset", {
+      const res = await fetch("http://localhost:3500/api/dlpc/upload", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+          "x-auth-token":
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTgwLCJpYXQiOjE3NzMwODcxMDUsImV4cCI6MTc3MzE3MzUwNX0.i8uELrrHFYddutxqCFcbCcKEcpRC_Bl69oGxoThChpM",
+        },
+        body: JSON.stringify({ fileName: file.name }),
       });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error ?? "Failed to get upload URL");
+      }
+      const { data } = await res.json();
+      const putRes = await fetch(data.signedUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+      if (!putRes.ok) throw new Error("Upload failed");
+      const url = data.url;
       if (field === "logo") {
         setDraft((prev) => ({ ...prev, logo: url }));
       } else if (field === "favicon") {
@@ -78,6 +99,11 @@ function Sidebar({ activeField, config, onChange, onClose }) {
       onChange((prev) => ({
         ...prev,
         hero: { ...prev.hero, heading: draft.heroHeading },
+      }));
+    } else if (activeField === "subheading") {
+      onChange((prev) => ({
+        ...prev,
+        hero: { ...prev.hero, subheading: draft.heroSubheading },
       }));
     } else if (activeField === "logo") {
       onChange((prev) => ({
@@ -144,6 +170,25 @@ function Sidebar({ activeField, config, onChange, onClose }) {
               value={draft.heroHeading}
               onChange={(e) =>
                 setDraft((prev) => ({ ...prev, heroHeading: e.target.value }))
+              }
+              className="w-full rounded border border-neutral-300 px-3 py-2 text-neutral-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </label>
+        )}
+
+        {activeField === "subheading" && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-neutral-700">
+              Subheading
+            </span>
+            <textarea
+              rows={4}
+              value={draft.heroSubheading}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  heroSubheading: e.target.value,
+                }))
               }
               className="w-full rounded border border-neutral-300 px-3 py-2 text-neutral-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
